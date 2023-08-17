@@ -1,0 +1,26 @@
+[package]
+name = "mqtt-discovery-handler"
+version = "0.1.0"
+license = "Apache-2.0"
+authors = ["Nicolas Belouin <nicolas.belouin@suse.com>"]
+edition = "2018"
+
+[dependencies]
+# TODO: Change this to Akri main when the library is merged
+akri-discovery-utils = { git = "https://github.com/project-akri/akri", branch = "main", package = "akri-discovery-utils" }
+async-trait = "0.1.0"
+env_logger = "0.10.0"
+futures = "0.3.28"
+log = "0.4.17"
+regex = "1.9.1"
+rumqttc = { version = "0.22.0", features = ["url"] }
+rustls = "0.21.6"
+rustls-native-certs = "0.6.3"
+rustls-pemfile = "1.0.3"
+serde = "1.0.163"
+serde_derive = "1.0.163"
+serde_regex = "1.1.0"
+tokio = { version = "1.0.1", features = ["time", "net", "sync"] }
+tokio-stream = "0.1.14"
+tonic = { version = "0.5.2", features = ["tls"] }
+url = { version = "2.4.0", features = ["serde"] }

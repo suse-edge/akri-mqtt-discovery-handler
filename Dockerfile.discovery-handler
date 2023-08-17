@@ -1,0 +1,27 @@
+ARG RUST_VERSION=1.71.1
+FROM --platform=$BUILDPLATFORM rust:${RUST_VERSION} as build
+ARG TARGETPLATFORM RUST_VERSION
+RUN case "$TARGETPLATFORM" in \
+    "linux/arm/v7") echo "armv7-unknown-linux-gnueabihf";; \
+    "linux/arm64") echo "aarch64-unknown-linux-gnu";; \
+    "linux/amd64") echo "x86_64-unknown-linux-gnu";; \
+    *) exit 1;; \
+    esac > /rust_target
+RUN rustup target add --toolchain $RUST_VERSION $(cat /rust_target)
+RUN rustup component add rustfmt --toolchain $RUST_VERSION
+RUN USER=root cargo new --bin dh
+WORKDIR /dh
+COPY ./Cargo.toml ./Cargo.toml
+RUN cargo build --release && \
+    rm ./src/*.rs && \
+    DEP_PATH=`echo "./target/release/deps/mqtt-discovery-handler*" | tr - _` && \
+    rm $DEP_PATH
+COPY ./src ./src
+RUN cargo build --release
+
+FROM debian:buster-slim
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libssl-dev && \
+    apt-get clean
+COPY --from=build /dh/target/release/mqtt-discovery-handler /mqtt-discovery-handler
+ENTRYPOINT ["/mqtt-discovery-handler"]
