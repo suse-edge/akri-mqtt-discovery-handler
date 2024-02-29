@@ -1,5 +1,7 @@
-ARG RUST_VERSION=1.71.1
+ARG RUST_VERSION=1.73.0
 FROM --platform=$BUILDPLATFORM rust:${RUST_VERSION} as build
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends protobuf-compiler 
 ARG TARGETPLATFORM RUST_VERSION
 RUN case "$TARGETPLATFORM" in \
     "linux/arm/v7") echo "armv7-unknown-linux-gnueabihf";; \

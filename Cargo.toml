@@ -22,5 +22,5 @@ serde_derive = "1.0.163"
 serde_regex = "1.1.0"
 tokio = { version = "1.0.1", features = ["time", "net", "sync"] }
 tokio-stream = "0.1.14"
-tonic = { version = "0.5.2", features = ["tls"] }
+tonic = { version = "0.10", features = ["tls"] }
 url = { version = "2.4.0", features = ["serde"] }
