@@ -36,6 +36,7 @@ pub struct MqttDiscoveryDetails {
     pub timeout_seconds: i64,
     #[serde(default, skip_serializing_if = "Option::is_none", with = "serde_regex")]
     pub message_regexp: Option<Regex>,
+    pub properties_prefix: Option<String>,
 }
 
 pub struct DiscoveryHandlerImpl {
@@ -83,7 +84,11 @@ fn authenticate_mqtt(
                 .ok_or(invalid_arg("password is empty"))?,
         )
         .map_err(|e| invalid_arg(format!("unable to parse password: {}", e)))?;
-        mqttoptions.set_credentials(username, password);
+        if !username.is_empty() && !password.is_empty() {
+            mqttoptions.set_credentials(username, password);
+        } else {
+            info!("No username or password provided -- skipping authentication")
+        }
     }
     Ok(())
 }
@@ -105,11 +110,13 @@ fn get_certificate_and_key(
                 .iter()
                 .chain(
                     rustls_pemfile::ec_private_keys(&mut &raw_key[..])
-                        .map_err(|e| invalid_arg(format!("Cannot parse key: {}", e)))?.iter(),
+                        .map_err(|e| invalid_arg(format!("Cannot parse key: {}", e)))?
+                        .iter(),
                 )
                 .chain(
                     rustls_pemfile::rsa_private_keys(&mut &raw_key[..])
-                        .map_err(|e| invalid_arg(format!("Cannot parse key: {}", e)))?.iter(),
+                        .map_err(|e| invalid_arg(format!("Cannot parse key: {}", e)))?
+                        .iter(),
                 )
                 .next()
                 .ok_or(invalid_arg("No key found"))?
@@ -174,6 +181,16 @@ impl DiscoveryHandler for DiscoveryHandlerImpl {
             deserialize_discovery_details(&discover_request.discovery_details)
                 .map_err(|e| tonic::Status::new(tonic::Code::InvalidArgument, format!("{}", e)))?;
 
+        info!(
+            "discover - mqtt_broker_uri: {}",
+            discovery_handler_config.mqtt_broker_uri
+        );
+        info!("discover - topics: {:?}", discovery_handler_config.topics);
+        info!(
+            "discover - timeout_seconds: {}",
+            discovery_handler_config.timeout_seconds
+        );
+
         let mut mqttoptions = MqttOptions::try_from(fill_client_id_if_needed(
             discovery_handler_config.mqtt_broker_uri.clone(),
         ))
@@ -209,6 +226,7 @@ impl DiscoveryHandler for DiscoveryHandlerImpl {
                 match mqtt_eventloop.poll().await {
                     Ok(Event::Incoming(Packet::Publish(notification))) => {
                         let topic = String::from_utf8(notification.topic.to_vec()).unwrap();
+                        info!("Received message on topic: {}", topic);
                         message_received_sender
                             .send(Action::Add(topic))
                             .await
@@ -272,18 +290,17 @@ impl DiscoveryHandler for DiscoveryHandlerImpl {
                         }
                         None => {
                             has_changed = true;
+                            info!("Adding device with topic: {}", topic);
                             discovered_devices.insert(
                                 topic.clone(),
                                 TimedDevice::new(
                                     Device {
                                         id: topic.clone(),
-                                        properties: HashMap::from([
-                                            ("MQTT_TOPIC".to_string(), topic.clone()),
-                                            (
-                                                "MQTT_BROKER_URI".to_string(),
-                                                mqtt_uri_string.clone(),
-                                            ),
-                                        ]),
+                                        properties: discovery_properties(
+                                            topic.clone(),
+                                            mqtt_uri_string.clone(),
+                                            &discovery_handler_config.properties_prefix,
+                                        ),
                                         mounts: Vec::default(),
                                         device_specs: Vec::default(),
                                     },
@@ -340,6 +357,28 @@ impl DiscoveryHandler for DiscoveryHandlerImpl {
             discovered_devices_receiver,
         )))
     }
+}
+
+fn discovery_properties(
+    topic: String,
+    uri: String,
+    properties_prefix: &Option<String>,
+) -> HashMap<String, String> {
+    let prefix = properties_prefix
+        .as_ref()
+        .map(|p| {
+            if p.ends_with('_') {
+                p.to_owned()
+            } else {
+                format!("{}_", p)
+            }
+        })
+        .unwrap_or_default()
+        .to_ascii_uppercase();
+    HashMap::from([
+        (format!("{prefix}MQTT_TOPIC"), topic),
+        (format!("{prefix}MQTT_BROKER_URI"), uri),
+    ])
 }
 
 #[cfg(test)]
@@ -451,5 +490,39 @@ B4Ezkc5fwpO+sXf2WKI3tktXYlITEcLPxPOxTSUUOpzY9JY9
     fn test_get_certificate_and_key_empty() -> Result<(), Status> {
         assert!(get_certificate_and_key(&HashMap::default())?.is_none());
         Ok(())
+    }
+
+    #[test]
+    fn test_discovery_details_deserialization_without_properties_prefix() {
+        use super::{deserialize_discovery_details, MqttDiscoveryDetails};
+        let discovery_details = r#"{
+            "mqttBrokerUri": "tcp://localhost:1883",
+            "topics": ["topic1", "topic2"],
+            "timeoutSeconds": 10
+        }"#;
+        let discovery_handler_config: MqttDiscoveryDetails =
+            deserialize_discovery_details(discovery_details).unwrap();
+        assert_eq!(discovery_handler_config.properties_prefix, None);
+    }
+
+    #[test]
+    fn test_discovery_properties() {
+        use super::discovery_properties;
+        let topic = "topic".to_string();
+        let uri = "tcp://localhost:1883".to_string();
+        let properties =
+            discovery_properties(topic.clone(), uri.clone(), &Some("prefix".to_string()));
+        assert_eq!(properties.len(), 2);
+        assert_eq!(properties.get("PREFIX_MQTT_TOPIC").unwrap(), &topic);
+        assert_eq!(properties.get("PREFIX_MQTT_BROKER_URI").unwrap(), &uri);
+        let properties =
+            discovery_properties(topic.clone(), uri.clone(), &Some("prefix_".to_string()));
+        assert_eq!(properties.len(), 2);
+        assert_eq!(properties.get("PREFIX_MQTT_TOPIC").unwrap(), &topic);
+        assert_eq!(properties.get("PREFIX_MQTT_BROKER_URI").unwrap(), &uri);
+        let properties = discovery_properties(topic.clone(), uri.clone(), &None);
+        assert_eq!(properties.len(), 2);
+        assert_eq!(properties.get("MQTT_TOPIC").unwrap(), &topic);
+        assert_eq!(properties.get("MQTT_BROKER_URI").unwrap(), &uri);
     }
 }

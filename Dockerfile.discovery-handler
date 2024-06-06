@@ -1,15 +1,16 @@
-ARG RUST_VERSION=1.73.0
+ARG RUST_VERSION=1.79.0
 FROM --platform=$BUILDPLATFORM rust:${RUST_VERSION} as build
 RUN apt-get update && \
     apt-get install -y --no-install-recommends protobuf-compiler 
 ARG TARGETPLATFORM RUST_VERSION
-RUN case "$TARGETPLATFORM" in \
+RUN RUST_TARGET=$( \
+  case "$TARGETPLATFORM" in \
     "linux/arm/v7") echo "armv7-unknown-linux-gnueabihf";; \
     "linux/arm64") echo "aarch64-unknown-linux-gnu";; \
     "linux/amd64") echo "x86_64-unknown-linux-gnu";; \
     *) exit 1;; \
-    esac > /rust_target
-RUN rustup target add --toolchain $RUST_VERSION $(cat /rust_target)
+  esac ) && \
+  rustup target add --toolchain $RUST_VERSION $RUST_TARGET
 RUN rustup component add rustfmt --toolchain $RUST_VERSION
 RUN USER=root cargo new --bin dh
 WORKDIR /dh

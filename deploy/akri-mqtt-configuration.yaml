@@ -1,0 +1,32 @@
+apiVersion: akri.sh/v0
+kind: Configuration
+metadata:
+  name: akri-mqtt
+spec:
+  discoveryHandler:
+    name: mqtt
+    discoveryDetails: |+
+        mqttBrokerUri: "tcp://192.168.1.14:1883"
+        topics: ["hello", "goodbye", "wow"]
+        timeoutSeconds: 60
+  brokerSpec:
+    brokerPodSpec:
+      containers:
+      - name: akri-mqtt-broker
+        image: "nginx:stable-alpine"
+        imagePullPolicy: Always
+        resources:
+          limits:
+            "{{PLACEHOLDER}}" : "1"
+  instanceServiceSpec:
+    ports:
+    - name: grpc
+      port: 80
+      targetPort: 8083
+  configurationServiceSpec:
+    ports:
+    - name: grpc
+      port: 80
+      targetPort: 8083
+  brokerProperties: {}
+  capacity: 5
