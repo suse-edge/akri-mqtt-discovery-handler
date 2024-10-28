@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use akri_discovery_utils::discovery::v0::Device;
+use log::info;
 use rumqttc::v5::ConnectionError;
 use tokio::{
     sync::mpsc::{self, Sender},
@@ -31,6 +32,7 @@ impl TimedDevice {
                 if let Ok(Some(_)) = timeout(timeout_duration, local_receiver.recv()).await {
                     continue;
                 }
+                info!("Device {} timed out", topic_clone.clone());
                 delete_sender
                     .send(Action::Delete(topic_clone.clone()))
                     .await

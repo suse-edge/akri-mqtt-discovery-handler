@@ -6,7 +6,6 @@ authors = ["Nicolas Belouin <nicolas.belouin@suse.com>"]
 edition = "2018"
 
 [dependencies]
-# TODO: Change this to Akri main when the library is merged
 akri-discovery-utils = { git = "https://github.com/project-akri/akri", branch = "main", package = "akri-discovery-utils" }
 async-trait = "0.1.0"
 env_logger = "0.10.0"
